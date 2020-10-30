@@ -132,13 +132,7 @@ class MainScreen extends StatelessWidget {
             return ScanResultTileCard(
               scanResult: scanResult,
               onTap: () {
-                // scanResult.device.connect();
-                Navigator.of(context)
-                    .push(MaterialPageRoute(builder: (context) {
-                  return DeviceScreen2(
-                    device: scanResult.device,
-                  );
-                }));
+                scanResult.device.connect();
               },
             );
           },

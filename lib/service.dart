@@ -70,7 +70,7 @@ class DeviceBluetoothService {
       scanResult.device.connect();
     });
 
-    FlutterBlue.instance.isScanning.last.then((value) => );
+    // FlutterBlue.instance.isScanning.last.then((value) => );
     FlutterBlue.instance.startScan(timeout: Duration(seconds: 30));
   }
 
