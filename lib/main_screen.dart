@@ -71,8 +71,7 @@ class MainScreen extends StatelessWidget {
               Icons.bluetooth_searching,
               color: Colors.black,
             ),
-            onPressed: () =>
-                FlutterBlue.instance.startScan(timeout: Duration(seconds: 4)),
+            onPressed: () => FlutterBlue.instance.startScan(),
           );
         }
       },

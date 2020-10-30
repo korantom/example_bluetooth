@@ -44,6 +44,7 @@ class DeviceBluetoothService {
     if (this.connectedDevices.containsKey(serialNumber)) return;
     if (this._scanListenerMap.containsKey(serialNumber)) return;
 
+    FlutterBlue.instance.stopScan();
     this._scanListenerMap[serialNumber] = FlutterBlue.instance.scanResults
         .where((List<ScanResult> scanResultList) {
       return scanResultList
@@ -51,7 +52,6 @@ class DeviceBluetoothService {
               (ScanResult scanResult) => _matchDevice(scanResult, serialNumber))
           .isNotEmpty;
     }).listen(null);
-
     this._scanListenerMap[serialNumber].onData((scanResultList) {
       // FlutterBlue.instance.stopScan();
       debugStreamController.add("Found $serialNumber in scan list");
