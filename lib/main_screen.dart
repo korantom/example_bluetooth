@@ -1,4 +1,5 @@
 import 'dart:core';
+import 'dart:developer';
 
 import 'package:example_bluetooth/service.dart';
 import 'package:flutter/cupertino.dart';
@@ -8,13 +9,14 @@ import 'package:flutter_blue/flutter_blue.dart';
 import 'device_screen.dart';
 
 class MainScreen extends StatelessWidget {
-  final serialNumberController =
-      TextEditingController(text: "1596352656100528929");
+  final serialNumberController = TextEditingController(text: "1596352656100528929");
+
+  DeviceBluetoothService service = DeviceBluetoothService();
 
   @override
   Widget build(BuildContext context) {
     FlutterBlue.instance.startScan();
-
+    print("App started scanning");
     return Material(
       child: CupertinoPageScaffold(
         navigationBar: CupertinoNavigationBar(
@@ -102,8 +104,9 @@ class MainScreen extends StatelessWidget {
             final device = connectedDevicesList[index];
             return ConnectedDeviceTileCard(
               device: device,
-              onTap: () {
-                device.disconnect();
+              onTap: () async {
+                await device.disconnect();
+                print("Device disconnected");
               },
             );
           },
@@ -115,11 +118,12 @@ class MainScreen extends StatelessWidget {
 
   Widget _scanned_device_list() {
     return StreamBuilder<List<ScanResult>>(
-      stream: FlutterBlue.instance.scanResults.map(
-          (List<ScanResult> scanResults) => scanResults
-              .where(
-                  (ScanResult scanResult) => scanResult.device.name.isNotEmpty)
-              .toList()),
+      stream: FlutterBlue.instance.scanResults,
+      // .map(
+      // (List<ScanResult> scanResults) => scanResults
+      //     .where(
+      //         (ScanResult scanResult) => scanResult.device.name.isNotEmpty)
+      //     .toList()),
       initialData: [],
       builder: (c, snapshot) {
         final scanResultList = snapshot.data;
@@ -130,8 +134,9 @@ class MainScreen extends StatelessWidget {
             final scanResult = scanResultList[index];
             return ScanResultTileCard(
               scanResult: scanResult,
-              onTap: () {
-                scanResult.device.connect();
+              onTap: () async {
+                await scanResult.device.connect();
+                print('Device connected');
               },
             );
           },
@@ -152,12 +157,20 @@ class MainScreen extends StatelessWidget {
           ElevatedButton(
             child: Text('Connect'),
             onPressed: () {
-              //TODO:
-              // DeviceBluetoothService.service
-              //     .connect(serialNumberController.text);
-              Navigator.of(context).push(MaterialPageRoute(builder: (context) {
-                return DeviceScreen(serialNumberController.text);
-              }));
+              service.scanAndConnect(serialNumberController.text).then((value) {
+                Navigator.of(context).push(MaterialPageRoute(builder: (context) {
+                  return DeviceScreen(serialNumberController.text, service);
+                }));
+              }).catchError((e) {
+                print(e);
+              showDialog(
+                context: context,
+                child: AlertDialog(
+                  title: Text('Error'),
+                  content: Text('${serialNumberController.text} cannot be connected'),
+                )
+              );
+              });
             },
           ),
         ],
