@@ -9,12 +9,13 @@ import 'service.dart';
 
 class DeviceScreen extends StatelessWidget {
   final String serialNumber;
+  final DeviceBluetoothService service;
 
-  const DeviceScreen(this.serialNumber);
+  const DeviceScreen(this.serialNumber, this.service);
 
   @override
   Widget build(BuildContext context) {
-    DeviceBluetoothService.service.connect(serialNumber);
+    // DeviceBluetoothService.service.connect(serialNumber);
 
     return Material(
       child: CupertinoPageScaffold(
@@ -34,7 +35,7 @@ class DeviceScreen extends StatelessWidget {
         children: [
           Text("device: $serialNumber"),
           StreamBuilder<List<String>>(
-              stream: DeviceBluetoothService.stream,
+              stream: service.stream,
               initialData: [],
               builder: (c, snapshot) {
                 bool connected = snapshot.data.contains(this.serialNumber);
@@ -47,20 +48,19 @@ class DeviceScreen extends StatelessWidget {
               ElevatedButton(
                   child: Text('Connect'),
                   onPressed: () {
-                    DeviceBluetoothService.service.connect(this.serialNumber);
+                    service.scanAndConnect(this.serialNumber);
                   }),
               ElevatedButton(
                   child: Text('Disconnect'),
                   onPressed: () {
-                    DeviceBluetoothService.service
-                        .disconnect(this.serialNumber);
+                    service.disconnect(this.serialNumber);
                   }),
             ],
           ),
           SizedBox(),
           Expanded(
             child: StreamBuilder<String>(
-                stream: DeviceBluetoothService.debugStream,
+                stream: service.debugStream,
                 initialData: "",
                 builder: (c, snapshot) {
                   debugMessages.insert(0, snapshot.data);
@@ -74,8 +74,7 @@ class DeviceScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    separatorBuilder: (BuildContext context, int index) =>
-                        Divider(),
+                    separatorBuilder: (BuildContext context, int index) => Divider(),
                   );
                 }),
           ),
