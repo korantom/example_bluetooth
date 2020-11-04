@@ -3,83 +3,96 @@ import 'dart:async';
 import 'package:flutter_blue/flutter_blue.dart';
 
 class DeviceBluetoothService {
-  static final DeviceBluetoothService _service =
-      DeviceBluetoothService._internal();
+  bool isScanning = false;
 
-  factory DeviceBluetoothService() => _service;
-  DeviceBluetoothService._internal();
+  StreamSubscription subScan;
+  StreamSubscription subScanResults;
+  StreamSubscription subDevice;
 
-  static DeviceBluetoothService get service => _service;
+  DeviceBluetoothService() {
+    subScan = FlutterBlue.instance.isScanning.listen((isScanning) => this.isScanning = isScanning);
+  }
+
+  void close() {
+    subScan.cancel();
+    if (subScanResults != null) {
+      subScanResults.cancel();
+    }
+  }
 
   //////////////////////////////////////////////////////////////////////////////
 
   // ignore: close_sinks
-  final StreamController<List<String>> streamController =
-      StreamController<List<String>>.broadcast();
+  final StreamController<List<String>> streamController = StreamController<List<String>>.broadcast();
 
   // ignore: close_sinks
-  final StreamController<String> debugStreamController =
-      StreamController<String>.broadcast();
+  final StreamController<String> debugStreamController = StreamController<String>.broadcast();
 
-  static Stream<List<String>> get stream =>
-      DeviceBluetoothService._service.streamController.stream;
-  static Stream<String> get debugStream =>
-      DeviceBluetoothService._service.debugStreamController.stream;
+  Stream<List<String>> get stream => streamController.stream;
+  Stream<String> get debugStream => debugStreamController.stream;
 
   //////////////////////////////////////////////////////////////////////////////
 
-  final Map<String, ScanResult> connectedDevices = Map<String, ScanResult>();
+  final Map<String, BluetoothDevice> connectedDevices = {};
+  List<ScanResult> scanResults = [];
 
-  Map<String, StreamSubscription<List<ScanResult>>> _scanListenerMap =
-      Map<String, StreamSubscription<List<ScanResult>>>();
-  Map<String, StreamSubscription<BluetoothDeviceState>>
-      _connectionStateListenerMap =
+  Map<String, StreamSubscription<List<ScanResult>>> _scanListenerMap = Map<String, StreamSubscription<List<ScanResult>>>();
+  Map<String, StreamSubscription<BluetoothDeviceState>> _connectionStateListenerMap =
       Map<String, StreamSubscription<BluetoothDeviceState>>();
 
   //////////////////////////////////////////////////////////////////////////////
 
-  Future<void> connect(String serialNumber) async {
+  Future<void> scanAndConnect(String serialNumber) async {
     debugStreamController.add("Searching for to $serialNumber");
+    if (!isScanning) {
+      FlutterBlue.instance.startScan();
+    }
 
-    if (this.connectedDevices.containsKey(serialNumber)) return;
-    if (this._scanListenerMap.containsKey(serialNumber)) return;
-
-    FlutterBlue.instance.stopScan();
-    this._scanListenerMap[serialNumber] = FlutterBlue.instance.scanResults
-        .where((List<ScanResult> scanResultList) {
-      return scanResultList
-          .where(
-              (ScanResult scanResult) => _matchDevice(scanResult, serialNumber))
-          .isNotEmpty;
-    }).listen(null);
-    this._scanListenerMap[serialNumber].onData((scanResultList) {
-      // FlutterBlue.instance.stopScan();
-      debugStreamController.add("Found $serialNumber in scan list");
-
-      this._scanListenerMap[serialNumber]?.cancel();
-      this._scanListenerMap.remove(serialNumber);
-
-      final scanResult = scanResultList
-          .firstWhere((scanResult) => _matchDevice(scanResult, serialNumber));
-
-      if (!this._connectionStateListenerMap.containsKey(serialNumber)) {
-        this._connectionStateListenerMap[serialNumber] = scanResult.device.state
-            .listen(_onConnectionStateChanged(serialNumber, scanResult));
+    subScanResults = FlutterBlue.instance.scanResults.listen((List<ScanResult> scanResultList) async {
+      ScanResult result = scanResultList.firstWhere((ScanResult scanResult) => _matchDevice(scanResult, serialNumber), orElse: () => null);
+      if (result != null) debugStreamController.add("Found $serialNumber in scan list");
+      if (result != null && !connectedDevices.values.any((device) => device == result.device)) {
+        subDevice = result.device.state.listen(_onConnectionStateChanged(serialNumber, result));
+        await connect(serialNumber, result);
+        if (subScanResults != null) {
+          subScanResults.cancel();
+        }
+        if (isScanning) {
+          FlutterBlue.instance.stopScan();
+        }
+        print('Connected devices:');
+        FlutterBlue.instance.connectedDevices.then((devices) => devices.forEach((device) => print(device)));
       }
-      debugStreamController.add("Connecting to $serialNumber");
-      scanResult.device.connect();
+      return null;
     });
-
-    // FlutterBlue.instance.isScanning.last.then((value) => );
-    FlutterBlue.instance.startScan(timeout: Duration(seconds: 30));
   }
 
-  void disconnect(String serialNumber) {
+  Future<void> connect(String serialNumber, ScanResult scanResult) {
+    debugStreamController.add("Connecting to $serialNumber");
+    return scanResult.device.connect().then((value) {
+      connectedDevices[serialNumber] = scanResult.device;
+      scanResult.device.state.listen((state) => print('Device ${scanResult.device.id} state: $state'));
+    }).catchError((error) {
+      print(error);
+    });
+  }
+
+  Future<void> disconnect(String serialNumber) {
     if (connectedDevices[serialNumber] != null) {
-      connectedDevices[serialNumber].device.disconnect();
       debugStreamController.add("disconnecting $serialNumber");
-    } else
+      return connectedDevices[serialNumber].disconnect()
+          .then((value) {
+            if (subDevice != null) subDevice.cancel();
+            return null;
+          })
+          .catchError((error) {
+            print(error);
+            throw error;
+          });
+    } else {
       debugStreamController.add("$serialNumber not connected");
+      return null;
+    }
   }
 
   bool _matchDevice(ScanResult scanResult, String serialNumber) {
@@ -104,8 +117,7 @@ class DeviceBluetoothService {
         imei_fix.map((byte) => String.fromCharCode(byte)).toList().join());
   }
 
-  Function _onConnectionStateChanged(
-      String serialNumber, ScanResult scanResult) {
+  Function _onConnectionStateChanged(String serialNumber, ScanResult scanResult) {
     return (BluetoothDeviceState state) {
       debugStreamController
           .add("\t$serialNumber _onConnectionStateChanged $state");
